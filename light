@@ -1338,7 +1338,117 @@ w1:Toggle(
     end
 )
 
+-- Name ESP with Toggle/Cleanup (no logic/visual changes for "show name above head")
+-- Toggle ESP_ON to show/hide all names at runtime. All Drawing objects/connections are tracked and cleaned up.
+-- Original structure by Blissful#4992, toggle/cleanup by Copilot
 
+local Settings = {
+    Name_Color = Color3.fromRGB(255, 255, 255),
+    Name_Size = 18,
+    Name_Outline = true,
+    Name_OutlineColor = Color3.fromRGB(0,0,0)
+}
+
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Tracking tables and toggle state
+local ALL_DRAWINGS = {}
+local ALL_CONNECTIONS = {}
+local ESP_ON = false
+
+local function NewTextLabel(text, color, size)
+    local txt = Drawing.new("Text")
+    txt.Visible = false
+    txt.Text = text
+    txt.Color = color
+    txt.Size = size
+    txt.Center = true
+    txt.Outline = Settings.Name_Outline
+    txt.OutlineColor = Settings.Name_OutlineColor
+    txt.Font = 2
+    txt.Position = Vector2.new(0,0)
+    table.insert(ALL_DRAWINGS, txt)
+    return txt
+end
+
+local function cleanupESP()
+    for _, obj in ipairs(ALL_DRAWINGS) do
+        pcall(function() obj.Visible = false end)
+        pcall(function() obj:Remove() end)
+    end
+    ALL_DRAWINGS = {}
+    for _, conn in ipairs(ALL_CONNECTIONS) do
+        pcall(function() conn:Disconnect() end)
+    end
+    ALL_CONNECTIONS = {}
+end
+
+local function NameESP(plr)
+    local txt = NewTextLabel(plr.Name, Settings.Name_Color, Settings.Name_Size)
+
+    local function Updater()
+        local c
+        c = game:GetService("RunService").RenderStepped:Connect(function()
+            if not ESP_ON then
+                txt.Visible = false
+                if c then c:Disconnect() end
+                return
+            end
+
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+                local pos, vis = Camera:WorldToViewportPoint(plr.Character.Head and plr.Character.Head.Position or plr.Character.HumanoidRootPart.Position)
+                if vis then
+                    txt.Position = Vector2.new(pos.X, pos.Y - 20)
+                    txt.Text = plr.Name
+                    txt.Color = Settings.Name_Color
+                    txt.Size = Settings.Name_Size
+                    txt.Visible = true
+                else
+                    txt.Visible = false
+                end
+            else
+                txt.Visible = false
+                if not Players:FindFirstChild(plr.Name) then
+                    if c then c:Disconnect() end
+                end
+            end
+        end)
+        table.insert(ALL_CONNECTIONS, c)
+    end
+    coroutine.wrap(Updater)()
+end
+
+local function startESP()
+    cleanupESP()
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v ~= Player then
+            NameESP(v)
+        end
+    end
+    local conn = Players.PlayerAdded:Connect(function(newplr)
+        if newplr ~= Player then
+            NameESP(newplr)
+        end
+    end)
+    table.insert(ALL_CONNECTIONS, conn)
+end
+
+--// Toggle integration (replace w1:Toggle with your UI if needed)
+w1:Toggle(
+    "Name ESP", -- Button Text
+    "name_esp_flag", -- Unique flag
+    false,
+    function(toggled)
+        ESP_ON = toggled
+        if ESP_ON then
+            startESP()
+        else
+            cleanupESP()
+        end
+    end
+)
 
 w1:Button(
     "Destroy GUI",
